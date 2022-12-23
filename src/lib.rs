@@ -1,10 +1,10 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub struct App {
-    pub blocks: Vec<Block>
+    pub blocks: Vec<Block>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub id: u64,
     pub hash: String,
@@ -15,7 +15,7 @@ pub struct Block {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         Self { blocks: vec![] }
     }
 
@@ -38,7 +38,7 @@ mod app_tests {
 
     #[test]
     fn creates_genesis_block() {
-        let mut app: App = App::new();
+        let mut app: App = App::default();
         app.genesis();
 
         let expected_genesis = Block {
