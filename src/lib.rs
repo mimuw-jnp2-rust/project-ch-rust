@@ -65,7 +65,7 @@ impl App {
             .blocks
             .last()
             .expect("There should be at least one block.");
-        if Block::is_block_valid(&block, latest_block) {
+        if Self::is_block_valid(&block, latest_block) {
             self.blocks.push(block);
         } else {
             error!("Could not add block - invalid.");
@@ -98,9 +98,40 @@ impl App {
             }
             let first = chain.get(i - 1).expect("First block has to exist.");
             let second = chain.get(i).expect("Second block has to exist.");
-            if !Block::is_block_valid(second, first) {
+            if !Self::is_block_valid(second, first) {
                 return false;
             }
+        }
+        true
+    }
+
+    pub fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
+        if block.previous_hash != previous_block.hash {
+            warn!("Block with id: {} has wrong previous hash", block.id);
+            return false;
+        } else if !hash_to_binary_representation(
+            &hex::decode(&block.hash).expect("Should decode from hex."),
+        )
+            .starts_with(DIFFICULTY_PREFIX)
+        {
+            warn!("Block with id: {} has invalid difficulty.", block.id);
+            return false;
+        } else if block.id != previous_block.id + 1 {
+            warn!(
+                "Block with id: {} is not the next block after the latest: {}",
+                block.id, previous_block.id
+            );
+            return false;
+        } else if hex::encode(calculate_hash(
+            block.id,
+            block.timestamp,
+            &block.previous_hash,
+            &block.data,
+            block.nonce,
+        )) != block.hash
+        {
+            warn!("Block with id: {} has invalid hash", block.id);
+            return false;
         }
         true
     }
