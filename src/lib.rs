@@ -279,4 +279,23 @@ mod app_tests {
             assert_eq!(captured_logs[1].level, Level::Error);
         })
     }
+
+    #[test]
+    fn validates_chain() {
+        let app = App::default();
+        let is_valid =
+            app.is_chain_valid((vec![get_genesis_block(), get_first_block()]).as_slice());
+
+        assert!(is_valid);
+    }
+
+    #[test]
+    fn does_not_validate_chain() {
+        let app = App::default();
+        let is_valid = app.is_chain_valid(
+            (vec![get_genesis_block(), get_genesis_block(), get_first_block()]).as_slice(),
+        );
+
+        assert!(!is_valid);
+    }
 }
