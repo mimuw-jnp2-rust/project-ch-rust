@@ -1,9 +1,8 @@
+use chrono::prelude::*;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use chrono::prelude::*;
-
 
 const DIFFICULTY_PREFIX: &str = "00";
 
@@ -112,7 +111,7 @@ impl App {
         } else if !hash_to_binary_representation(
             &hex::decode(&block.hash).expect("Should decode from hex."),
         )
-            .starts_with(DIFFICULTY_PREFIX)
+        .starts_with(DIFFICULTY_PREFIX)
         {
             warn!("Block with id: {} has invalid difficulty.", block.id);
             return false;
