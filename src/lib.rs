@@ -77,7 +77,7 @@ impl App {
         } else if !hash_to_string_representation(
             &hex::decode(&block.hash).expect("Should decode from hex."),
         )
-            .starts_with(DIFFICULTY_PREFIX)
+        .starts_with(DIFFICULTY_PREFIX)
         {
             warn!("Block with id: {} has invalid difficulty.", block.id);
             return false;
