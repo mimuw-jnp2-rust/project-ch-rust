@@ -1,7 +1,9 @@
-use log::{error, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use chrono::prelude::*;
+
 
 const DIFFICULTY_PREFIX: &str = "00";
 
@@ -19,7 +21,7 @@ pub struct Block {
     pub nonce: u64,
 }
 
-fn hash_to_string_representation(hash: &[u8]) -> String {
+fn hash_to_binary_representation(hash: &[u8]) -> String {
     let mut rep: String = String::default();
     for c in hash {
         rep.push_str(&format!("{:b}", c));
@@ -105,35 +107,41 @@ impl App {
 }
 
 impl Block {
-    pub fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
-        if block.previous_hash != previous_block.hash {
-            warn!("Block with id: {} has wrong previous hash", block.id);
-            return false;
-        } else if !hash_to_string_representation(
-            &hex::decode(&block.hash).expect("Should decode from hex."),
-        )
-        .starts_with(DIFFICULTY_PREFIX)
-        {
-            warn!("Block with id: {} has invalid difficulty.", block.id);
-            return false;
-        } else if block.id != previous_block.id + 1 {
-            warn!(
-                "Block with id: {} is not the next block after the latest: {}",
-                block.id, previous_block.id
-            );
-            return false;
-        } else if hex::encode(calculate_hash(
-            block.id,
-            block.timestamp,
-            &block.previous_hash,
-            &block.data,
-            block.nonce,
-        )) != block.hash
-        {
-            warn!("Block with id: {} has invalid hash", block.id);
-            return false;
+    pub fn new(id: u64, previous_hash: String, data: String) -> Self {
+        let now = Utc::now();
+        let (nonce, hash) = Block::mine_block(id, now.timestamp(), &previous_hash, &data);
+        Self {
+            id,
+            hash,
+            previous_hash,
+            timestamp: now.timestamp(),
+            data,
+            nonce,
         }
-        true
+    }
+
+    fn mine_block(id: u64, timestamp: i64, previous_hash: &str, data: &str) -> (u64, String) {
+        info!("Mining block ...");
+        let mut nonce = 0;
+
+        loop {
+            if nonce % 100000 == 0 {
+                info!("Nonce: {}", nonce);
+            }
+
+            let hash = calculate_hash(id, timestamp, previous_hash, data, nonce);
+            let binary_hash = hash_to_binary_representation(&hash);
+            if binary_hash.starts_with(DIFFICULTY_PREFIX) {
+                info!(
+                    "Mined! Nonce: {}, hash: {}, binary_hash: {}",
+                    nonce,
+                    hex::encode(&hash),
+                    binary_hash
+                );
+                return (nonce, hex::encode(hash));
+            }
+            nonce += 1;
+        }
     }
 }
 
