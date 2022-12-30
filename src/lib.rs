@@ -77,7 +77,7 @@ impl App {
         } else if !hash_to_string_representation(
             &hex::decode(&block.hash).expect("Should decode from hex."),
         )
-        .starts_with(DIFFICULTY_PREFIX)
+            .starts_with(DIFFICULTY_PREFIX)
         {
             warn!("Block with id: {} has invalid difficulty.", block.id);
             return false;
@@ -105,22 +105,143 @@ impl App {
 #[cfg(test)]
 mod app_tests {
     use super::*;
+    use log::Level;
 
-    #[test]
-    fn creates_genesis_block() {
-        let mut app: App = App::default();
-        app.genesis();
-
-        let expected_genesis = Block {
+    fn get_genesis_block() -> Block {
+        Block {
             id: 0,
             previous_hash: String::from("genesis"),
             timestamp: 1665411300,
             data: String::from("genesis"),
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
-        };
+        }
+    }
+
+    fn get_first_block() -> Block {
+        Block {
+            id: 1,
+            previous_hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e"
+                .to_string(),
+            timestamp: 1665411301,
+            data: String::from("first_block"),
+            nonce: 78321,
+            hash: "0000590a7f2735c5ebf696401385dc3f76e33cd4dc3bd7ceeff7be992ada1c98".to_string(),
+        }
+    }
+
+    #[test]
+    fn creates_genesis_block() {
+        let mut app = App::default();
+        let genesis_block = get_genesis_block();
+
+        app.genesis();
 
         assert_eq!(app.blocks.len(), 1);
-        assert_eq!(app.blocks.first().unwrap(), &expected_genesis);
+        assert_eq!(app.blocks.first().unwrap(), &genesis_block);
+    }
+
+    #[test]
+    fn validates_first_block() {
+        let mut app = App::default();
+        let first_block = get_first_block();
+
+        app.genesis();
+        app.try_add_block(first_block.clone());
+
+        assert_eq!(app.blocks.len(), 2);
+        assert_eq!(app.blocks.get(1).unwrap(), &first_block);
+    }
+
+    #[test]
+    fn does_not_validate_with_wrong_previous_hash() {
+        let mut app = App::default();
+        let mut first_block = get_first_block();
+        first_block.previous_hash.replace_range(0..1, "f");
+
+        testing_logger::setup();
+
+        app.genesis();
+        app.try_add_block(first_block);
+
+        assert_eq!(app.blocks.len(), 1);
+        testing_logger::validate(|captured_logs| {
+            assert_eq!(captured_logs.len(), 2);
+            assert_eq!(
+                captured_logs[0].body,
+                "Block with id: 1 has wrong previous hash"
+            );
+            assert_eq!(captured_logs[0].level, Level::Warn);
+            assert_eq!(captured_logs[1].body, "Could not add block - invalid.");
+            assert_eq!(captured_logs[1].level, Level::Error);
+        })
+    }
+
+    #[test]
+    fn does_not_validate_with_wrong_difficulty() {
+        let mut app = App::default();
+        let mut first_block = get_first_block();
+        first_block.hash.replace_range(0..2, "0f");
+
+        testing_logger::setup();
+
+        app.genesis();
+        app.try_add_block(first_block);
+
+        assert_eq!(app.blocks.len(), 1);
+        testing_logger::validate(|captured_logs| {
+            assert_eq!(captured_logs.len(), 2);
+            assert_eq!(
+                captured_logs[0].body,
+                "Block with id: 1 has invalid difficulty."
+            );
+            assert_eq!(captured_logs[0].level, Level::Warn);
+            assert_eq!(captured_logs[1].body, "Could not add block - invalid.");
+            assert_eq!(captured_logs[1].level, Level::Error);
+        })
+    }
+
+    #[test]
+    fn does_not_validate_with_wrong_id() {
+        let mut app = App::default();
+        let mut first_block = get_first_block();
+        first_block.id = 2;
+
+        testing_logger::setup();
+
+        app.genesis();
+        app.try_add_block(first_block);
+
+        assert_eq!(app.blocks.len(), 1);
+        testing_logger::validate(|captured_logs| {
+            assert_eq!(captured_logs.len(), 2);
+            assert_eq!(
+                captured_logs[0].body,
+                "Block with id: 2 is not the next block after the latest: 0"
+            );
+            assert_eq!(captured_logs[0].level, Level::Warn);
+            assert_eq!(captured_logs[1].body, "Could not add block - invalid.");
+            assert_eq!(captured_logs[1].level, Level::Error);
+        })
+    }
+
+    #[test]
+    fn does_not_validate_with_wrong_hash() {
+        let mut app = App::default();
+        let mut first_block = get_first_block();
+        first_block.data = "ala ma kota".to_string();
+        testing_logger::setup();
+
+        app.genesis();
+        app.try_add_block(first_block);
+
+        assert_eq!(app.blocks.len(), 1);
+        testing_logger::validate(|captured_logs| {
+            assert_eq!(captured_logs.len(), 2);
+            assert_eq!(captured_logs[0].body, "Block with id: 1 has invalid hash");
+            assert_eq!(captured_logs[0].level, Level::Warn);
+            assert_eq!(captured_logs[1].body, "Could not add block - invalid.");
+            assert_eq!(captured_logs[1].level, Level::Error);
+        })
     }
 }
