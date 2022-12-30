@@ -9,7 +9,7 @@ pub struct App {
     pub blocks: Vec<Block>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub id: u64,
     pub hash: String,
