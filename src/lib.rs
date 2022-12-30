@@ -63,14 +63,49 @@ impl App {
             .blocks
             .last()
             .expect("There should be at least one block.");
-        if self.is_block_valid(&block, latest_block) {
+        if Block::is_block_valid(&block, latest_block) {
             self.blocks.push(block);
         } else {
             error!("Could not add block - invalid.");
         }
     }
 
-    fn is_block_valid(&self, block: &Block, previous_block: &Block) -> bool {
+    fn choose_chain(&mut self, local: Vec<Block>, remote: Vec<Block>) -> Vec<Block> {
+        let is_local_valid = self.is_chain_valid(&local);
+        let is_remote_valid = self.is_chain_valid(&remote);
+
+        if is_local_valid && is_remote_valid {
+            if local.len() >= remote.len() {
+                local
+            } else {
+                remote
+            }
+        } else if is_local_valid {
+            local
+        } else if is_remote_valid {
+            remote
+        } else {
+            panic!("Local and remote chains both are invalid!");
+        }
+    }
+
+    fn is_chain_valid(&self, chain: &[Block]) -> bool {
+        for i in 0..chain.len() {
+            if i == 0 {
+                continue;
+            }
+            let first = chain.get(i - 1).expect("First block has to exist.");
+            let second = chain.get(i).expect("Second block has to exist.");
+            if !Block::is_block_valid(second, first) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl Block {
+    pub fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
         if block.previous_hash != previous_block.hash {
             warn!("Block with id: {} has wrong previous hash", block.id);
             return false;
