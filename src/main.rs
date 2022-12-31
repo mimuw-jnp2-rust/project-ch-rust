@@ -1,4 +1,4 @@
-use crate::p2p::{AppBehaviour, ChainResponse};
+use crate::p2p::{AppBehaviour};
 use libp2p::{
     core::upgrade,
     futures::StreamExt,
@@ -11,7 +11,6 @@ use libp2p::{
 use log::{error, info};
 use project_ch_rust::App;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
@@ -62,14 +61,6 @@ async fn main() {
         init_sender.send(true).expect("Can send init event.");
     });
 
-    handle_incoming(&mut response_receiver, &mut init_receiver, &mut swarm).await;
-}
-
-async fn handle_incoming(
-    response_receiver: &mut UnboundedReceiver<ChainResponse>,
-    init_receiver: &mut UnboundedReceiver<bool>,
-    mut swarm: &mut Swarm<AppBehaviour>,
-) {
     let mut stdin = BufReader::new(stdin()).lines();
 
     loop {
