@@ -1,3 +1,4 @@
+use crate::p2p::{AppBehaviour, ChainResponse};
 use libp2p::{
     core::upgrade,
     futures::StreamExt,
@@ -10,14 +11,13 @@ use libp2p::{
 use log::{error, info};
 use project_ch_rust::App;
 use std::time::Duration;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
     sync::mpsc,
     time::sleep,
 };
-use tokio::sync::mpsc::UnboundedReceiver;
-use crate::p2p::{AppBehaviour, ChainResponse};
 
 mod p2p;
 
@@ -40,8 +40,7 @@ async fn main() {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
-    let behaviour =
-        AppBehaviour::new(App::default(), response_sender, init_sender.clone()).await;
+    let behaviour = AppBehaviour::new(App::default(), response_sender, init_sender.clone()).await;
 
     let mut swarm = SwarmBuilder::new(transport, behaviour, *p2p::PEER_ID)
         .executor(Box::new(|fut| {
@@ -66,7 +65,11 @@ async fn main() {
     handle_incoming(&mut response_receiver, &mut init_receiver, &mut swarm).await;
 }
 
-async fn handle_incoming(response_receiver: &mut UnboundedReceiver<ChainResponse>, init_receiver: &mut UnboundedReceiver<bool>, mut swarm: &mut Swarm<AppBehaviour>) {
+async fn handle_incoming(
+    response_receiver: &mut UnboundedReceiver<ChainResponse>,
+    init_receiver: &mut UnboundedReceiver<bool>,
+    mut swarm: &mut Swarm<AppBehaviour>,
+) {
     let mut stdin = BufReader::new(stdin()).lines();
 
     loop {
