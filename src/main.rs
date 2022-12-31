@@ -1,4 +1,4 @@
-use crate::p2p::{AppBehaviour};
+use crate::p2p::AppBehaviour;
 use libp2p::{
     core::upgrade,
     futures::StreamExt,
