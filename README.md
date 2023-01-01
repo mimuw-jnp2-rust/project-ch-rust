@@ -34,6 +34,26 @@ Idea is based on the [article](https://blog.logrocket.com/how-to-build-a-blockch
 
 __Extra__: If there would be enough time I plan to realize features described in _Extra features_ section.
 
+## First part
+#### Running ch-rust:
+```bash
+cargo build
+```
+Open few terminals (e.g. 3), in each of them run:
+```bash
+RUST_LOG=info cargo run
+```
+Feel free to experiment with commands:
+- `ls p` - list peers in network
+- `ls c` - list mined blocks
+- `create b {some_data}` - create block with _some_data_
+
+### Notes
+As already mentioned first part is based, in a high degree, on the [article](https://blog.logrocket.com/how-to-build-a-blockchain-in-rust/).
+
+`Block` and `App` logic was slightly improved and now is covered with unit tests -> see Github CI. Also goal of getting acquainted 
+with `libp2p` has been realized.
+
 ## Libraries
 - [Tokio](https://tokio.rs/)
 - [Libp2p](https://crates.io/crates/libp2p)
