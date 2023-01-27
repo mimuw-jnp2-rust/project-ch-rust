@@ -112,8 +112,15 @@ async fn main() {
                 }
                 p2p::EventType::Input(line) => match line.as_str() {
                     "ls p" => p2p::handle_print_peers(&swarm),
-                    cmd if cmd.starts_with("ls c") => p2p::handle_print_chain(&swarm),
-                    cmd if cmd.starts_with("create b") => p2p::handle_create_block(cmd, &mut swarm),
+                    cmd if cmd.starts_with("ls a") => p2p::handle_print_accounts(&swarm),
+                    cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm),
+                    cmd if cmd.starts_with("create account") => {
+                        p2p::handle_create_account(&mut swarm)
+                    }
+                    cmd if cmd.starts_with("create block ") => p2p::handle_create_block(
+                        cmd.strip_prefix("create block ").expect("Can strip"),
+                        &mut swarm,
+                    ),
                     _ => error!("Unknown command"),
                 },
             }
