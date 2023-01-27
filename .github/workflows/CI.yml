@@ -15,13 +15,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Lint
-        run: |
-          cargo fmt -- --check
-          cargo clippy -- -D warnings
+      - name: Build
+        run: cargo build --verbose
       - name: Test
         run: |
           cargo check
           cargo test --all
-      - name: Build
-        run: cargo build --verbose

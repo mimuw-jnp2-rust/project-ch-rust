@@ -74,7 +74,7 @@ impl App {
     }
 
     pub fn add_account(&mut self) -> Account {
-        let mut account = Account::default();
+        let mut account = Account::new();
 
         loop {
             if !self.accounts.contains(&account) {
@@ -82,7 +82,7 @@ impl App {
                 break;
             }
 
-            account = Account::default();
+            account = Account::new();
         }
 
         account
@@ -220,7 +220,7 @@ impl Block {
 }
 
 impl Account {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         let mut rng = rand::thread_rng();
 
         Self {
