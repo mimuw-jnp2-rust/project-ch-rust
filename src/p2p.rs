@@ -7,7 +7,7 @@ use libp2p::{
 };
 use log::{error, info};
 use once_cell::sync::Lazy;
-use project_ch_rust::{App, Block};
+use project_ch_rust::{App, Block, Data};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tokio::sync::mpsc;
@@ -131,6 +131,13 @@ pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
     peers.iter().for_each(|p| info!("{}", p));
 }
 
+pub fn handle_print_accounts(swarm: &Swarm<AppBehaviour>) {
+    info!("Accounts:");
+    let pretty_json = serde_json::to_string_pretty(&swarm.behaviour().app.accounts)
+        .expect("Can jsonify accounts");
+    info!("{}", pretty_json);
+}
+
 pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("Local Blockchain:");
     let pretty_json =
@@ -138,24 +145,30 @@ pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("{}", pretty_json);
 }
 
-pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("create b") {
+pub fn handle_create_block(data: &str, swarm: &mut Swarm<AppBehaviour>) {
+    if let Ok(data) = serde_json::from_str::<Data>(data) {
         let behaviour = swarm.behaviour_mut();
         let latest_block = behaviour
             .app
             .blocks
             .last()
             .expect("There is at least one block");
-        let block = Block::new(
-            latest_block.id + 1,
-            latest_block.hash.clone(),
-            data.to_owned(),
-        );
-        let json = serde_json::to_string(&block).expect("Can jsoinfy requrst.");
+        let block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
+        let json = serde_json::to_string(&block).expect("Can jsonify request.");
         behaviour.app.blocks.push(block);
         info!("Broadcasting new block");
         behaviour
             .floodsub
             .publish(BLOCK_TOPIC.clone(), json.as_bytes());
     }
+}
+
+pub fn handle_create_account(swarm: &mut Swarm<AppBehaviour>) {
+    let behaviour = swarm.behaviour_mut();
+    let new_account = behaviour.app.add_account();
+    info!("Creating new account with address: {}", new_account.address);
+
+    let json_str =
+        serde_json::to_string::<Data>(&Data::Account(new_account)).expect("Can jsonify account");
+    handle_create_block(&json_str, swarm);
 }
