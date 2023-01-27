@@ -74,7 +74,7 @@ impl App {
     }
 
     pub fn add_account(&mut self) -> Account {
-        let mut account = Account::new();
+        let mut account = Account::default();
 
         loop {
             if !self.accounts.contains(&account) {
@@ -82,7 +82,7 @@ impl App {
                 break;
             }
 
-            account = Account::new();
+            account = Account::default();
         }
 
         account
@@ -106,11 +106,8 @@ impl App {
             .last()
             .expect("There should be at least one block.");
         if Self::is_block_valid(&block, latest_block) {
-            match &block.data {
-                Data::Account(account) => {
-                    self.accounts.insert(account.clone());
-                }
-                _ => {}
+            if let Data::Account(account) = &block.data {
+                self.accounts.insert(account.clone());
             }
             self.blocks.push(block);
         } else {
@@ -223,7 +220,7 @@ impl Block {
 }
 
 impl Account {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         let mut rng = rand::thread_rng();
 
         Self {

@@ -7,9 +7,8 @@ use libp2p::{
 };
 use log::{error, info};
 use once_cell::sync::Lazy;
-use project_ch_rust::{Account, App, Block, Data};
+use project_ch_rust::{App, Block, Data};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::HashSet;
 use tokio::sync::mpsc;
 
@@ -134,7 +133,8 @@ pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
 
 pub fn handle_print_accounts(swarm: &Swarm<AppBehaviour>) {
     info!("Accounts:");
-    let pretty_json = serde_json::to_string_pretty(&swarm.behaviour().app.accounts).expect("Can jsonify accounts");
+    let pretty_json = serde_json::to_string_pretty(&swarm.behaviour().app.accounts)
+        .expect("Can jsonify accounts");
     info!("{}", pretty_json);
 }
 
@@ -153,11 +153,7 @@ pub fn handle_create_block(data: &str, swarm: &mut Swarm<AppBehaviour>) {
             .blocks
             .last()
             .expect("There is at least one block");
-        let block = Block::new(
-            latest_block.id + 1,
-            latest_block.hash.clone(),
-            data.to_owned(),
-        );
+        let block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
         let json = serde_json::to_string(&block).expect("Can jsonify request.");
         behaviour.app.blocks.push(block);
         info!("Broadcasting new block");
