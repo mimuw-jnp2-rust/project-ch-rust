@@ -157,22 +157,20 @@ pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("{}", pretty_json);
 }
 
-pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
-    if let Ok(data) = serde_json::from_str::<Data>(cmd) {
-        let behaviour = swarm.behaviour_mut();
-        let latest_block = behaviour
-            .app
-            .blocks
-            .last()
-            .expect("There is at least one block");
-        let block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
-        let json = serde_json::to_string(&block).expect("Can jsonify request.");
-        behaviour.app.blocks.push(block);
-        info!("Broadcasting new block");
-        behaviour
-            .floodsub
-            .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-    }
+pub fn handle_create_block(data: Data, swarm: &mut Swarm<AppBehaviour>) {
+    let behaviour = swarm.behaviour_mut();
+    let latest_block = behaviour
+        .app
+        .blocks
+        .last()
+        .expect("There is at least one block");
+    let block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
+    let json = serde_json::to_string(&block).expect("Can jsonify request.");
+    behaviour.app.blocks.push(block);
+    info!("Broadcasting new block");
+    behaviour
+        .floodsub
+        .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
 
 pub fn handle_create_account(swarm: &mut Swarm<AppBehaviour>) {
@@ -180,7 +178,16 @@ pub fn handle_create_account(swarm: &mut Swarm<AppBehaviour>) {
     let new_account = behaviour.app.add_account();
     info!("Creating new account with address: {}", new_account.address);
 
-    let json_str =
-        serde_json::to_string::<Data>(&Data::Account(new_account)).expect("Can jsonify account");
-    handle_create_block(&json_str, swarm);
+    let data = Data::Account(new_account);
+    handle_create_block(data, swarm);
+}
+
+pub fn handle_transfer(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
+    let behaviour = swarm.behaviour_mut();
+    info!("Sending transfer");
+
+    let data = serde_json::from_str::<Data>(cmd).expect("Can jsonify transfer");
+    if behaviour.app.try_add_transfer(&data) {
+        handle_create_block(data, swarm);
+    }
 }
