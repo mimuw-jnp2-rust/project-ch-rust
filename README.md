@@ -46,8 +46,7 @@ RUST_LOG=info cargo run
 Feel free to experiment with commands:
 - `ls p` - list peers in network
 - `ls c` - list mined blocks
-- `create b {some_data}` - create block with _some_data_
-
+- `transfer {"Transfer":[1,2,3]}` - transfers [from, to, amount]
 ### Notes
 As already mentioned first part is based, in a high degree, on the [article](https://blog.logrocket.com/how-to-build-a-blockchain-in-rust/).
 
