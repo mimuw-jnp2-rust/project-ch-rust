@@ -139,14 +139,16 @@ pub fn handle_print_accounts(swarm: &Swarm<AppBehaviour>) {
 }
 
 pub fn handle_print_account(cmd: &str, swarm: &Swarm<AppBehaviour>) {
-    let address = serde_json::from_str::<Address>(cmd).expect("Can parse account id.");
-
-    if let Some(account) = swarm.behaviour().app.accounts.get(&address) {
-        let pretty_json = serde_json::to_string_pretty(account).expect("Can jsonify account.");
-        info!("Account:");
-        info!("{}", pretty_json);
+    if let Ok(address) = serde_json::from_str::<Address>(cmd) {
+        if let Some(account) = swarm.behaviour().app.accounts.get(&address) {
+            let pretty_json = serde_json::to_string_pretty(account).expect("Can jsonify account.");
+            info!("Account:");
+            info!("{}", pretty_json);
+        } else {
+            info!("No account with address: <{:?}>", address);
+        }
     } else {
-        info!("No account with address: <{:?}>", address);
+        error!("ls account: error parsing");
     }
 }
 
@@ -186,8 +188,11 @@ pub fn handle_transfer(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
     let behaviour = swarm.behaviour_mut();
     info!("Sending transfer");
 
-    let data = serde_json::from_str::<Data>(cmd).expect("Can jsonify transfer");
-    if behaviour.app.try_add_transfer(&data) {
-        handle_create_block(data, swarm);
+    if let Ok(data) = serde_json::from_str::<Data>(cmd) {
+        if behaviour.app.try_add_transfer(&data) {
+            handle_create_block(data, swarm);
+        }
+    } else {
+        error!("Transfer: error parsing!");
     }
 }

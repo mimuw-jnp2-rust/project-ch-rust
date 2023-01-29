@@ -121,7 +121,10 @@ async fn main() {
                     cmd if cmd.starts_with("create account") => {
                         p2p::handle_create_account(&mut swarm)
                     }
-                    cmd if cmd.starts_with("transfer ") => p2p::handle_transfer(cmd.strip_prefix("transfer ").expect("Can strip"), &mut swarm),
+                    cmd if cmd.starts_with("transfer ") => p2p::handle_transfer(
+                        cmd.strip_prefix("transfer ").expect("Can strip"),
+                        &mut swarm,
+                    ),
                     _ => error!("Unknown command"),
                 },
             }
