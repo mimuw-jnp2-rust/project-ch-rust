@@ -112,7 +112,11 @@ async fn main() {
                 }
                 p2p::EventType::Input(line) => match line.as_str() {
                     "ls p" => p2p::handle_print_peers(&swarm),
-                    cmd if cmd.starts_with("ls a") => p2p::handle_print_accounts(&swarm),
+                    cmd if cmd.starts_with("ls accounts") => p2p::handle_print_accounts(&swarm),
+                    cmd if cmd.starts_with("ls account") => p2p::handle_print_account(
+                        cmd.strip_prefix("ls account").expect("Can strip"),
+                        &swarm,
+                    ),
                     cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm),
                     cmd if cmd.starts_with("create account") => {
                         p2p::handle_create_account(&mut swarm)
