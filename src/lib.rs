@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::vec;
 
 const DIFFICULTY_PREFIX: &str = "00";
+const GENESIS_ADDRESS: u64 = 0;
+const GENESIS_ACCOUNT: Account = Account { address: GENESIS_ADDRESS, balance: u64::MAX};
+
 const INIT_BALANCE: u64 = 0;
 
 pub struct App {
@@ -25,8 +28,8 @@ pub struct Account {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Data {
-    Text(String),
     Account(Account),
+    Transfer(Address, Address, u64)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -95,10 +98,11 @@ impl App {
             id: 0,
             previous_hash: String::from("genesis"),
             timestamp: 1665411300,
-            data: Data::Text(String::from("genesis")),
+            data: Data::Account(GENESIS_ACCOUNT.clone()),
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         };
+        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT.clone());
         self.blocks.push(genesis_block);
     }
 
@@ -110,11 +114,37 @@ impl App {
         if Self::is_block_valid(&block, latest_block) {
             if let Data::Account(account) = &block.data {
                 self.accounts.insert(account.address, account.clone());
+            } else if let Data::Transfer(..) = &block.data {
+                self.try_add_transfer(&block.data);
             }
             self.blocks.push(block);
         } else {
             error!("Could not add block - invalid.");
         }
+    }
+
+    pub fn try_add_transfer(&mut self, transfer: &Data) -> bool {
+        if let Data::Transfer(adr1, adr2, amount) = transfer {
+            let amount = *amount;
+            return if let (Some(acc1), Some(acc2)) = (self.accounts.get(adr1), self.accounts.get(adr2)) {
+                let balance1 = acc1.balance;
+                let balance2 = acc2.balance;
+                if acc1.balance < amount {
+                    error!("Transfer from: insufficient balance!");
+                    return false;
+                }
+
+                self.accounts.insert(*adr1, Account { address: *adr1, balance: balance1 - amount });
+                self.accounts.insert(*adr2, Account { address: *adr2, balance: balance2.saturating_add(amount) });
+                true
+            } else {
+                error!("Transfer: invalid addresses!");
+                false
+            }
+        }
+
+        error!("Wrong transfer params!");
+        false
     }
 
     pub fn choose_chain(&mut self, local: Vec<Block>, remote: Vec<Block>) -> Vec<Block> {
@@ -242,7 +272,7 @@ mod app_tests {
             id: 0,
             previous_hash: String::from("genesis"),
             timestamp: 1665411300,
-            data: Data::Text(String::from("genesis")),
+            data: Data::Account(GENESIS_ACCOUNT.clone()),
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         }
@@ -254,7 +284,7 @@ mod app_tests {
             previous_hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e"
                 .to_string(),
             timestamp: 1665411301,
-            data: Data::Text(String::from("first_block")),
+            data: Data::Account(Account { address: 1, balance: INIT_BALANCE}),
             nonce: 38656,
             hash: "00003a55bc3e237053bcc5444b589a093c596a4d8d0b2ec6b3a2177f4bdeb42f".to_string(),
         }
@@ -360,7 +390,7 @@ mod app_tests {
     fn does_not_validate_with_wrong_hash() {
         let mut app = App::default();
         let mut first_block = get_first_block();
-        first_block.data = Data::Text("ala ma kota".to_string());
+        first_block.data = Data::Account(Account { address: 1, balance: 0 });
         testing_logger::setup();
 
         app.genesis();
