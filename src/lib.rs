@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 use log::{error, info, warn};
+use rand::rngs::ThreadRng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -9,16 +10,23 @@ use std::vec;
 
 const DIFFICULTY_PREFIX: &str = "00";
 const GENESIS_ADDRESS: u64 = 0;
-const GENESIS_ACCOUNT: Account = Account { address: GENESIS_ADDRESS, balance: u64::MAX};
+const GENESIS_SECRET: u64 = 1234;
+const GENESIS_ACCOUNT: Account = Account {
+    address: GENESIS_ADDRESS,
+    balance: u64::MAX,
+};
 
 const INIT_BALANCE: u64 = 0;
+
+pub type Address = u64;
+pub type AuthKey = u64;
+pub type Secret = u64;
 
 pub struct App {
     pub blocks: Vec<Block>,
     pub accounts: HashMap<Address, Account>,
+    secrets: HashMap<Address, Secret>,
 }
-
-pub type Address = u64;
 
 #[derive(Serialize, Deserialize, Hash, Debug, Clone, PartialEq, Eq)]
 pub struct Account {
@@ -29,7 +37,7 @@ pub struct Account {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Data {
     Account(Account),
-    Transfer(Address, Address, u64)
+    Transfer(Address, Address, u64, AuthKey),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -75,19 +83,25 @@ impl App {
         Self {
             blocks: vec![],
             accounts: HashMap::new(),
+            secrets: HashMap::new(),
         }
     }
 
     pub fn add_account(&mut self) -> Account {
-        let mut account = Account::new();
+        let mut rng = rand::thread_rng();
+        let mut account = Account::new(&mut rng);
 
         loop {
             if !self.accounts.contains_key(&account.address) {
+                let secret = rng.gen::<Secret>();
+                info!("Secret: {}", secret);
+
                 self.accounts.insert(account.address, account.clone());
+                self.secrets.insert(account.address, secret);
                 break;
             }
 
-            account = Account::new();
+            account = Account::new(&mut rng);
         }
 
         account
@@ -102,7 +116,9 @@ impl App {
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         };
-        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT.clone());
+        self.secrets.insert(GENESIS_ADDRESS, GENESIS_SECRET.clone());
+        self.accounts
+            .insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
         self.blocks.push(genesis_block);
     }
 
@@ -124,27 +140,55 @@ impl App {
     }
 
     pub fn try_add_transfer(&mut self, transfer: &Data) -> bool {
-        if let Data::Transfer(adr1, adr2, amount) = transfer {
+        if let Data::Transfer(sender, receiver, amount, auth_key) = transfer {
+            if let Some(secret) = self.secrets.get(sender) {
+                if !self.is_authorized(auth_key, secret) {
+                    error!("Transfer: invalid authentication key!");
+                    return false;
+                }
+            } else {
+                error!("Transfer: invalid sender address!");
+                return false;
+            }
+
             let amount = *amount;
-            return if let (Some(acc1), Some(acc2)) = (self.accounts.get(adr1), self.accounts.get(adr2)) {
+            return if let (Some(acc1), Some(acc2)) =
+                (self.accounts.get(sender), self.accounts.get(receiver))
+            {
                 let balance1 = acc1.balance;
                 let balance2 = acc2.balance;
                 if acc1.balance < amount {
                     error!("Transfer from: insufficient balance!");
                     return false;
                 }
+                self.accounts.insert(
+                    *sender,
+                    Account {
+                        address: *sender,
+                        balance: balance1 - amount,
+                    },
+                );
+                self.accounts.insert(
+                    *receiver,
+                    Account {
+                        address: *receiver,
+                        balance: balance2.saturating_add(amount),
+                    },
+                );
 
-                self.accounts.insert(*adr1, Account { address: *adr1, balance: balance1 - amount });
-                self.accounts.insert(*adr2, Account { address: *adr2, balance: balance2.saturating_add(amount) });
                 true
             } else {
-                error!("Transfer: invalid addresses!");
+                error!("Transfer: invalid receiver address!");
                 false
-            }
+            };
         }
 
         error!("Wrong transfer params!");
         false
+    }
+
+    fn is_authorized(&self, auth_key: &AuthKey, secret: &Secret) -> bool {
+        auth_key == secret
     }
 
     pub fn choose_chain(&mut self, local: Vec<Block>, remote: Vec<Block>) -> Vec<Block> {
@@ -252,9 +296,7 @@ impl Block {
 }
 
 impl Account {
-    pub fn new() -> Self {
-        let mut rng = rand::thread_rng();
-
+    pub fn new(rng: &mut ThreadRng) -> Self {
         Self {
             address: rng.gen::<Address>(),
             balance: INIT_BALANCE,
@@ -284,7 +326,10 @@ mod app_tests {
             previous_hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e"
                 .to_string(),
             timestamp: 1665411301,
-            data: Data::Account(Account { address: 1, balance: INIT_BALANCE}),
+            data: Data::Account(Account {
+                address: 1,
+                balance: INIT_BALANCE,
+            }),
             nonce: 38656,
             hash: "00003a55bc3e237053bcc5444b589a093c596a4d8d0b2ec6b3a2177f4bdeb42f".to_string(),
         }
@@ -390,7 +435,10 @@ mod app_tests {
     fn does_not_validate_with_wrong_hash() {
         let mut app = App::default();
         let mut first_block = get_first_block();
-        first_block.data = Data::Account(Account { address: 1, balance: 0 });
+        first_block.data = Data::Account(Account {
+            address: 1,
+            balance: 0,
+        });
         testing_logger::setup();
 
         app.genesis();
