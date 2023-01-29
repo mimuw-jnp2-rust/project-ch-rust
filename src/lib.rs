@@ -4,14 +4,15 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::vec;
 
 const DIFFICULTY_PREFIX: &str = "00";
+const INIT_BALANCE: u64 = 0;
 
 pub struct App {
     pub blocks: Vec<Block>,
-    pub accounts: HashSet<Account>,
+    pub accounts: HashMap<Address, Account>,
 }
 
 pub type Address = u64;
@@ -19,6 +20,7 @@ pub type Address = u64;
 #[derive(Serialize, Deserialize, Hash, Debug, Clone, PartialEq, Eq)]
 pub struct Account {
     pub address: Address,
+    pub balance: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -69,7 +71,7 @@ impl App {
     pub fn default() -> Self {
         Self {
             blocks: vec![],
-            accounts: HashSet::new(),
+            accounts: HashMap::new(),
         }
     }
 
@@ -77,8 +79,8 @@ impl App {
         let mut account = Account::new();
 
         loop {
-            if !self.accounts.contains(&account) {
-                self.accounts.insert(account.clone());
+            if !self.accounts.contains_key(&account.address) {
+                self.accounts.insert(account.address, account.clone());
                 break;
             }
 
@@ -107,7 +109,7 @@ impl App {
             .expect("There should be at least one block.");
         if Self::is_block_valid(&block, latest_block) {
             if let Data::Account(account) = &block.data {
-                self.accounts.insert(account.clone());
+                self.accounts.insert(account.address, account.clone());
             }
             self.blocks.push(block);
         } else {
@@ -225,6 +227,7 @@ impl Account {
 
         Self {
             address: rng.gen::<Address>(),
+            balance: INIT_BALANCE,
         }
     }
 }

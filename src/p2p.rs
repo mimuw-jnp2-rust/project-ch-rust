@@ -7,7 +7,7 @@ use libp2p::{
 };
 use log::{error, info};
 use once_cell::sync::Lazy;
-use project_ch_rust::{App, Block, Data};
+use project_ch_rust::{Address, App, Block, Data};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tokio::sync::mpsc;
@@ -138,6 +138,18 @@ pub fn handle_print_accounts(swarm: &Swarm<AppBehaviour>) {
     info!("{}", pretty_json);
 }
 
+pub fn handle_print_account(cmd: &str, swarm: &Swarm<AppBehaviour>) {
+    let address = serde_json::from_str::<Address>(cmd).expect("Can parse account id.");
+
+    if let Some(account) = swarm.behaviour().app.accounts.get(&address) {
+        let pretty_json = serde_json::to_string_pretty(account).expect("Can jsonify account.");
+        info!("Account:");
+        info!("{}", pretty_json);
+    } else {
+        info!("No account with address: <{:?}>", address);
+    }
+}
+
 pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("Local Blockchain:");
     let pretty_json =
@@ -145,8 +157,8 @@ pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("{}", pretty_json);
 }
 
-pub fn handle_create_block(data: &str, swarm: &mut Swarm<AppBehaviour>) {
-    if let Ok(data) = serde_json::from_str::<Data>(data) {
+pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
+    if let Ok(data) = serde_json::from_str::<Data>(cmd) {
         let behaviour = swarm.behaviour_mut();
         let latest_block = behaviour
             .app
