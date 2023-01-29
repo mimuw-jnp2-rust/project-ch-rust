@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::vec;
 
 const DIFFICULTY_PREFIX: &str = "00";
+const GENESIS_ADDRESS: u64 = 0;
+const GENESIS_ACCOUNT: Account = Account { address: GENESIS_ADDRESS, balance: u64::MAX};
+
 const INIT_BALANCE: u64 = 0;
 
 pub struct App {
@@ -95,10 +98,11 @@ impl App {
             id: 0,
             previous_hash: String::from("genesis"),
             timestamp: 1665411300,
-            data: Data::Text(String::from("genesis")),
+            data: Data::Account(GENESIS_ACCOUNT.clone()),
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         };
+        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT.clone());
         self.blocks.push(genesis_block);
     }
 
@@ -242,7 +246,7 @@ mod app_tests {
             id: 0,
             previous_hash: String::from("genesis"),
             timestamp: 1665411300,
-            data: Data::Text(String::from("genesis")),
+            data: Data::Account(GENESIS_ACCOUNT.clone()),
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         }
