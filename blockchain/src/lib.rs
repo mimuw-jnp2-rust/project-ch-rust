@@ -103,7 +103,9 @@ impl Node {
                     self.accounts.insert(account.address, account.clone());
                 }
                 Data::Transfer(..) => {
-                    self.try_add_transfer(&block.data);
+                    if !self.try_add_transfer(&block.data) {
+                        return false;
+                    }
                 }
             }
             self.blocks.push(block);
