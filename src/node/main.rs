@@ -1,6 +1,7 @@
 mod lib;
 mod p2p;
 
+use crate::p2p::AppBehaviour;
 use libp2p::{
     core::upgrade,
     futures::StreamExt,
@@ -18,7 +19,6 @@ use tokio::{
     sync::mpsc,
     time::sleep,
 };
-use crate::p2p::AppBehaviour;
 
 #[tokio::main]
 async fn main() {
@@ -39,7 +39,8 @@ async fn main() {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
-    let behaviour = AppBehaviour::new(lib::App::default(), response_sender, init_sender.clone()).await;
+    let behaviour =
+        AppBehaviour::new(lib::App::default(), response_sender, init_sender.clone()).await;
 
     let mut swarm = SwarmBuilder::new(transport, behaviour, *p2p::PEER_ID)
         .executor(Box::new(|fut| {
@@ -53,7 +54,7 @@ async fn main() {
             .parse()
             .expect("Can get a local socket."),
     )
-        .expect("Swarm can be started.");
+    .expect("Swarm can be started.");
 
     spawn(async move {
         sleep(Duration::from_secs(1)).await;

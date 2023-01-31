@@ -117,8 +117,7 @@ impl App {
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         };
         self.secrets.insert(GENESIS_ADDRESS, GENESIS_SECRET.clone());
-        self.accounts
-            .insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
+        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
         self.blocks.push(genesis_block);
     }
 
@@ -231,7 +230,7 @@ impl App {
         } else if !hash_to_binary_representation(
             &hex::decode(&block.hash).expect("Should decode from hex."),
         )
-            .starts_with(DIFFICULTY_PREFIX)
+        .starts_with(DIFFICULTY_PREFIX)
         {
             warn!("Block with id: {} has invalid difficulty.", block.id);
             return false;
