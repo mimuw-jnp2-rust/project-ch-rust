@@ -1,3 +1,4 @@
+use crate::lib::{Address, App, Block, Data};
 use libp2p::{
     floodsub::{Floodsub, FloodsubEvent, Topic},
     identity,
@@ -7,7 +8,6 @@ use libp2p::{
 };
 use log::{error, info};
 use once_cell::sync::Lazy;
-use project_ch_rust::{Address, App, Block, Data};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tokio::sync::mpsc;
