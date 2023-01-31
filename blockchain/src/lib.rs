@@ -22,7 +22,8 @@ pub type Address = u64;
 pub type AuthKey = u64;
 pub type Secret = u64;
 
-pub struct App {
+#[derive(Default)]
+pub struct Node {
     pub blocks: Vec<Block>,
     pub accounts: HashMap<Address, Account>,
     secrets: HashMap<Address, Secret>,
@@ -35,12 +36,6 @@ pub struct Account {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub enum Data {
-    Account(Account),
-    Transfer(Address, Address, u64, AuthKey),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub id: u64,
     pub hash: String,
@@ -50,41 +45,33 @@ pub struct Block {
     pub nonce: u64,
 }
 
-fn hash_to_binary_representation(hash: &[u8]) -> String {
-    let mut rep: String = String::default();
-    for c in hash {
-        rep.push_str(&format!("{:b}", c));
-    }
-    rep
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum Data {
+    Account(Account),
+    Transfer(Address, Address, u64, AuthKey),
 }
 
-fn calculate_hash(
-    id: u64,
-    timestamp: i64,
-    previous_hash: &str,
-    data: &Data,
-    nonce: u64,
-) -> Vec<u8> {
-    let object = json!({
-        "id": id,
-        "previous_hash": previous_hash,
-        "data": data,
-        "timestamp": timestamp,
-        "nonce": nonce
-    });
-
-    let mut hasher = Sha256::new();
-    hasher.update(object.to_string().as_bytes());
-    hasher.finalize().as_slice().to_owned()
-}
-
-impl App {
-    pub fn default() -> Self {
+impl Node {
+    pub fn new() -> Self {
         Self {
             blocks: vec![],
             accounts: HashMap::new(),
             secrets: HashMap::new(),
         }
+    }
+
+    pub fn genesis(&mut self) {
+        let genesis_block = Block {
+            id: 0,
+            previous_hash: String::from("genesis"),
+            timestamp: 1665411300,
+            data: Data::Account(GENESIS_ACCOUNT.clone()),
+            nonce: 420,
+            hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
+        };
+        self.secrets.insert(GENESIS_ADDRESS, GENESIS_SECRET);
+        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
+        self.blocks.push(genesis_block);
     }
 
     pub fn add_account(&mut self) -> Account {
@@ -107,34 +94,25 @@ impl App {
         account
     }
 
-    pub fn genesis(&mut self) {
-        let genesis_block = Block {
-            id: 0,
-            previous_hash: String::from("genesis"),
-            timestamp: 1665411300,
-            data: Data::Account(GENESIS_ACCOUNT.clone()),
-            nonce: 420,
-            hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
-        };
-        self.secrets.insert(GENESIS_ADDRESS, GENESIS_SECRET.clone());
-        self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
-        self.blocks.push(genesis_block);
-    }
+    pub fn try_add_block(&mut self, block: Block) -> bool {
+        let latest_block = self.get_last_block();
 
-    pub fn try_add_block(&mut self, block: Block) {
-        let latest_block = self
-            .blocks
-            .last()
-            .expect("There should be at least one block.");
         if Self::is_block_valid(&block, latest_block) {
-            if let Data::Account(account) = &block.data {
-                self.accounts.insert(account.address, account.clone());
-            } else if let Data::Transfer(..) = &block.data {
-                self.try_add_transfer(&block.data);
+            match &block.data {
+                Data::Account(account) => {
+                    self.accounts.insert(account.address, account.clone());
+                }
+                Data::Transfer(..) => {
+                    if !self.try_add_transfer(&block.data) {
+                        return false;
+                    }
+                }
             }
             self.blocks.push(block);
+            true
         } else {
             error!("Could not add block - invalid.");
+            false
         }
     }
 
@@ -186,10 +164,6 @@ impl App {
         false
     }
 
-    fn is_authorized(&self, auth_key: &AuthKey, secret: &Secret) -> bool {
-        auth_key == secret
-    }
-
     pub fn choose_chain(&mut self, local: Vec<Block>, remote: Vec<Block>) -> Vec<Block> {
         let is_local_valid = self.is_chain_valid(&local);
         let is_remote_valid = self.is_chain_valid(&remote);
@@ -209,6 +183,14 @@ impl App {
         }
     }
 
+    pub fn get_last_block(&self) -> &Block {
+        self.blocks.last().expect("There is at least one block")
+    }
+
+    fn is_authorized(&self, auth_key: &AuthKey, secret: &Secret) -> bool {
+        auth_key == secret
+    }
+
     fn is_chain_valid(&self, chain: &[Block]) -> bool {
         for i in 0..chain.len() {
             if i == 0 {
@@ -223,14 +205,14 @@ impl App {
         true
     }
 
-    pub fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
+    fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
         if block.previous_hash != previous_block.hash {
             warn!("Block with id: {} has wrong previous hash", block.id);
             return false;
         } else if !hash_to_binary_representation(
             &hex::decode(&block.hash).expect("Should decode from hex."),
         )
-        .starts_with(DIFFICULTY_PREFIX)
+            .starts_with(DIFFICULTY_PREFIX)
         {
             warn!("Block with id: {} has invalid difficulty.", block.id);
             return false;
@@ -303,8 +285,36 @@ impl Account {
     }
 }
 
+fn hash_to_binary_representation(hash: &[u8]) -> String {
+    let mut rep: String = String::new();
+    for c in hash {
+        rep.push_str(&format!("{:b}", c));
+    }
+    rep
+}
+
+fn calculate_hash(
+    id: u64,
+    timestamp: i64,
+    previous_hash: &str,
+    data: &Data,
+    nonce: u64,
+) -> Vec<u8> {
+    let object = json!({
+        "id": id,
+        "previous_hash": previous_hash,
+        "data": data,
+        "timestamp": timestamp,
+        "nonce": nonce
+    });
+
+    let mut hasher = Sha256::new();
+    hasher.update(object.to_string().as_bytes());
+    hasher.finalize().as_slice().to_owned()
+}
+
 #[cfg(test)]
-mod app_tests {
+mod node_tests {
     use super::*;
     use log::Level;
 
@@ -336,40 +346,40 @@ mod app_tests {
 
     #[test]
     fn creates_genesis_block() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let genesis_block = get_genesis_block();
 
-        app.genesis();
+        node.genesis();
 
-        assert_eq!(app.blocks.len(), 1);
-        assert_eq!(app.blocks.first().unwrap(), &genesis_block);
+        assert_eq!(node.blocks.len(), 1);
+        assert_eq!(node.blocks.first().unwrap(), &genesis_block);
     }
 
     #[ignore]
     #[test]
     fn validates_first_block() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let first_block = get_first_block();
 
-        app.genesis();
-        app.try_add_block(first_block.clone());
+        node.genesis();
+        node.try_add_block(first_block.clone());
 
-        assert_eq!(app.blocks.len(), 2);
-        assert_eq!(app.blocks.get(1).unwrap(), &first_block);
+        assert_eq!(node.blocks.len(), 2);
+        assert_eq!(node.blocks.get(1).unwrap(), &first_block);
     }
 
     #[test]
     fn does_not_validate_with_wrong_previous_hash() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let mut first_block = get_first_block();
         first_block.previous_hash.replace_range(0..1, "f");
 
         testing_logger::setup();
 
-        app.genesis();
-        app.try_add_block(first_block);
+        node.genesis();
+        node.try_add_block(first_block);
 
-        assert_eq!(app.blocks.len(), 1);
+        assert_eq!(node.blocks.len(), 1);
         testing_logger::validate(|captured_logs| {
             assert_eq!(captured_logs.len(), 2);
             assert_eq!(
@@ -384,16 +394,16 @@ mod app_tests {
 
     #[test]
     fn does_not_validate_with_wrong_difficulty() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let mut first_block = get_first_block();
         first_block.hash.replace_range(0..2, "0f");
 
         testing_logger::setup();
 
-        app.genesis();
-        app.try_add_block(first_block);
+        node.genesis();
+        node.try_add_block(first_block);
 
-        assert_eq!(app.blocks.len(), 1);
+        assert_eq!(node.blocks.len(), 1);
         testing_logger::validate(|captured_logs| {
             assert_eq!(captured_logs.len(), 2);
             assert_eq!(
@@ -408,16 +418,16 @@ mod app_tests {
 
     #[test]
     fn does_not_validate_with_wrong_id() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let mut first_block = get_first_block();
         first_block.id = 2;
 
         testing_logger::setup();
 
-        app.genesis();
-        app.try_add_block(first_block);
+        node.genesis();
+        node.try_add_block(first_block);
 
-        assert_eq!(app.blocks.len(), 1);
+        assert_eq!(node.blocks.len(), 1);
         testing_logger::validate(|captured_logs| {
             assert_eq!(captured_logs.len(), 2);
             assert_eq!(
@@ -432,7 +442,7 @@ mod app_tests {
 
     #[test]
     fn does_not_validate_with_wrong_hash() {
-        let mut app = App::default();
+        let mut node = Node::new();
         let mut first_block = get_first_block();
         first_block.data = Data::Account(Account {
             address: 1,
@@ -440,10 +450,10 @@ mod app_tests {
         });
         testing_logger::setup();
 
-        app.genesis();
-        app.try_add_block(first_block);
+        node.genesis();
+        node.try_add_block(first_block);
 
-        assert_eq!(app.blocks.len(), 1);
+        assert_eq!(node.blocks.len(), 1);
         testing_logger::validate(|captured_logs| {
             assert_eq!(captured_logs.len(), 2);
             assert_eq!(captured_logs[0].body, "Block with id: 1 has invalid hash");
@@ -456,17 +466,17 @@ mod app_tests {
     #[ignore]
     #[test]
     fn validates_chain() {
-        let app = App::default();
+        let node = Node::new();
         let is_valid =
-            app.is_chain_valid((vec![get_genesis_block(), get_first_block()]).as_slice());
+            node.is_chain_valid((vec![get_genesis_block(), get_first_block()]).as_slice());
 
         assert!(is_valid);
     }
 
     #[test]
     fn does_not_validate_chain() {
-        let app = App::default();
-        let is_valid = app.is_chain_valid(
+        let node = Node::new();
+        let is_valid = node.is_chain_valid(
             (vec![get_genesis_block(), get_genesis_block(), get_first_block()]).as_slice(),
         );
 

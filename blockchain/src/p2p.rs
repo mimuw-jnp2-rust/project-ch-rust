@@ -1,4 +1,4 @@
-use crate::lib::{Address, App, Block, Data};
+use crate::lib::{Address, Node, Block, Data};
 use libp2p::{
     floodsub::{Floodsub, FloodsubEvent, Topic},
     identity,
@@ -43,17 +43,17 @@ pub struct AppBehaviour {
     #[behaviour(ignore)]
     pub init_sender: mpsc::UnboundedSender<bool>,
     #[behaviour(ignore)]
-    pub app: App,
+    pub node: Node,
 }
 
 impl AppBehaviour {
     pub async fn new(
-        app: App,
+        node: Node,
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
         let mut behaviour = Self {
-            app,
+            node,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
@@ -76,14 +76,14 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     info!("Response from {}:", msg.source);
                     res.blocks.iter().for_each(|r| info!("{:?}", r));
 
-                    self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), res.blocks);
+                    self.node.blocks = self.node.choose_chain(self.node.blocks.clone(), res.blocks);
                 }
             } else if let Ok(res) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
                 info!("Sending local chain to {}", msg.source.to_string());
                 let peer_id = res.from_peer_id;
                 if PEER_ID.to_string() == peer_id {
                     if let Err(e) = self.response_sender.send(ChainResponse {
-                        blocks: self.app.blocks.clone(),
+                        blocks: self.node.blocks.clone(),
                         receiver: msg.source.to_string(),
                     }) {
                         error!("Error sending response via channel, {}", e);
@@ -91,7 +91,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             } else if let Ok(block) = serde_json::from_slice::<Block>(&msg.data) {
                 info!("Received new block from {}", msg.source.to_string());
-                self.app.try_add_block(block);
+                self.node.try_add_block(block);
             }
         }
     }
@@ -133,14 +133,14 @@ pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
 
 pub fn handle_print_accounts(swarm: &Swarm<AppBehaviour>) {
     info!("Accounts:");
-    let pretty_json = serde_json::to_string_pretty(&swarm.behaviour().app.accounts)
+    let pretty_json = serde_json::to_string_pretty(&swarm.behaviour().node.accounts)
         .expect("Can jsonify accounts");
     info!("{}", pretty_json);
 }
 
 pub fn handle_print_account(cmd: &str, swarm: &Swarm<AppBehaviour>) {
     if let Ok(address) = serde_json::from_str::<Address>(cmd) {
-        if let Some(account) = swarm.behaviour().app.accounts.get(&address) {
+        if let Some(account) = swarm.behaviour().node.accounts.get(&address) {
             let pretty_json = serde_json::to_string_pretty(account).expect("Can jsonify account.");
             info!("Account:");
             info!("{}", pretty_json);
@@ -155,29 +155,14 @@ pub fn handle_print_account(cmd: &str, swarm: &Swarm<AppBehaviour>) {
 pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
     info!("Local Blockchain:");
     let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("Can jsonify blocks.");
+        serde_json::to_string_pretty(&swarm.behaviour().node.blocks).expect("Can jsonify blocks.");
     info!("{}", pretty_json);
-}
-
-pub fn handle_create_block(data: Data, swarm: &mut Swarm<AppBehaviour>) {
-    let behaviour = swarm.behaviour_mut();
-    let latest_block = behaviour
-        .app
-        .blocks
-        .last()
-        .expect("There is at least one block");
-    let block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
-    let json = serde_json::to_string(&block).expect("Can jsonify request.");
-    behaviour.app.blocks.push(block);
-    info!("Broadcasting new block");
-    behaviour
-        .floodsub
-        .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
 
 pub fn handle_create_account(swarm: &mut Swarm<AppBehaviour>) {
     let behaviour = swarm.behaviour_mut();
-    let new_account = behaviour.app.add_account();
+    let new_account = behaviour.node.add_account();
+
     info!("Creating new account with address: {}", new_account.address);
 
     let data = Data::Account(new_account);
@@ -185,14 +170,33 @@ pub fn handle_create_account(swarm: &mut Swarm<AppBehaviour>) {
 }
 
 pub fn handle_transfer(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
-    let behaviour = swarm.behaviour_mut();
     info!("Sending transfer");
 
     if let Ok(data) = serde_json::from_str::<Data>(cmd) {
-        if behaviour.app.try_add_transfer(&data) {
+        if let Data::Transfer(..) = &data {
             handle_create_block(data, swarm);
+        } else {
+            error!("Transfer: invalid data!");
         }
     } else {
         error!("Transfer: error parsing!");
     }
+}
+
+fn handle_create_block(data: Data, swarm: &mut Swarm<AppBehaviour>) {
+    let behaviour = swarm.behaviour_mut();
+    let latest_block = behaviour.node.get_last_block();
+    let new_block = Block::new(latest_block.id + 1, latest_block.hash.clone(), data);
+
+    if !behaviour.node.try_add_block(new_block.clone()) {
+        error!("Error adding block!");
+        return;
+    }
+
+    info!("Broadcasting new block");
+
+    let json = serde_json::to_string(&new_block).expect("Can jsonify request.");
+    behaviour
+        .floodsub
+        .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
