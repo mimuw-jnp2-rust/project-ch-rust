@@ -40,7 +40,7 @@ async fn main() {
         .boxed();
 
     let behaviour =
-        AppBehaviour::new(lib::App::default(), response_sender, init_sender.clone()).await;
+        AppBehaviour::new(lib::Node::new(), response_sender, init_sender.clone()).await;
 
     let mut swarm = SwarmBuilder::new(transport, behaviour, *p2p::PEER_ID)
         .executor(Box::new(|fut| {
@@ -85,7 +85,7 @@ async fn main() {
             match event {
                 p2p::EventType::Init => {
                     let peers = p2p::get_list_peers(&swarm);
-                    swarm.behaviour_mut().app.genesis();
+                    swarm.behaviour_mut().node.genesis();
 
                     info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {
