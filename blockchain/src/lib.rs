@@ -10,29 +10,32 @@ use std::vec;
 
 const DIFFICULTY_PREFIX: &str = "00";
 const GENESIS_ADDRESS: u64 = 0;
-const GENESIS_SECRET: u64 = 1234;
+const GENESIS_PUB_KEY: u64 = 1234;
 const GENESIS_ACCOUNT: Account = Account {
     address: GENESIS_ADDRESS,
     balance: u64::MAX,
+    pub_key: GENESIS_PUB_KEY,
 };
 
 const INIT_BALANCE: u64 = 0;
 
 pub type Address = u64;
-pub type AuthKey = u64;
-pub type Secret = u64;
+pub type PrivateKey = u64;
+pub type PublicKey = u64;
+pub type Signature = u64;
 
 #[derive(Default)]
 pub struct Node {
     pub blocks: Vec<Block>,
     pub accounts: HashMap<Address, Account>,
-    secrets: HashMap<Address, Secret>,
+    pub pub_keys: HashMap<Address, PublicKey>,
 }
 
 #[derive(Serialize, Deserialize, Hash, Debug, Clone, PartialEq, Eq)]
 pub struct Account {
     pub address: Address,
     pub balance: u64,
+    pub pub_key: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -48,7 +51,7 @@ pub struct Block {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Data {
     Account(Account),
-    Transfer(Address, Address, u64, AuthKey),
+    Transfer(Address, Address, u64, Signature),
 }
 
 impl Node {
@@ -56,7 +59,7 @@ impl Node {
         Self {
             blocks: vec![],
             accounts: HashMap::new(),
-            secrets: HashMap::new(),
+            pub_keys: HashMap::new(),
         }
     }
 
@@ -69,7 +72,7 @@ impl Node {
             nonce: 420,
             hash: "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e".to_string(),
         };
-        self.secrets.insert(GENESIS_ADDRESS, GENESIS_SECRET);
+        self.pub_keys.insert(GENESIS_ADDRESS, GENESIS_PUB_KEY);
         self.accounts.insert(GENESIS_ADDRESS, GENESIS_ACCOUNT);
         self.blocks.push(genesis_block);
     }
@@ -80,11 +83,8 @@ impl Node {
 
         loop {
             if !self.accounts.contains_key(&account.address) {
-                let secret = rng.gen::<Secret>();
-                info!("Secret: {}", secret);
-
                 self.accounts.insert(account.address, account.clone());
-                self.secrets.insert(account.address, secret);
+                self.pub_keys.insert(account.address, account.pub_key);
                 break;
             }
 
@@ -101,6 +101,7 @@ impl Node {
             match &block.data {
                 Data::Account(account) => {
                     self.accounts.insert(account.address, account.clone());
+                    self.pub_keys.insert(account.address, account.pub_key);
                 }
                 Data::Transfer(..) => {
                     if !self.try_add_transfer(&block.data) {
@@ -117,10 +118,10 @@ impl Node {
     }
 
     pub fn try_add_transfer(&mut self, transfer: &Data) -> bool {
-        if let Data::Transfer(sender, receiver, amount, auth_key) = transfer {
-            if let Some(secret) = self.secrets.get(sender) {
-                if !self.is_authorized(auth_key, secret) {
-                    error!("Transfer: invalid authentication key!");
+        if let Data::Transfer(sender, receiver, amount, signature) = transfer {
+            if let Some(pub_key) = self.pub_keys.get(sender) {
+                if !self.verify_signature(signature, pub_key) {
+                    error!("Transfer: signature verification failed");
                     return false;
                 }
             } else {
@@ -134,7 +135,10 @@ impl Node {
             {
                 let balance1 = acc1.balance;
                 let balance2 = acc2.balance;
-                if acc1.balance < amount {
+                let pub_key1 = acc1.pub_key;
+                let pub_key2 = acc2.pub_key;
+
+                if balance1 < amount {
                     error!("Transfer from: insufficient balance!");
                     return false;
                 }
@@ -143,6 +147,7 @@ impl Node {
                     Account {
                         address: *sender,
                         balance: balance1 - amount,
+                        pub_key: pub_key1,
                     },
                 );
                 self.accounts.insert(
@@ -150,6 +155,7 @@ impl Node {
                     Account {
                         address: *receiver,
                         balance: balance2.saturating_add(amount),
+                        pub_key: pub_key2,
                     },
                 );
 
@@ -187,8 +193,8 @@ impl Node {
         self.blocks.last().expect("There is at least one block")
     }
 
-    fn is_authorized(&self, auth_key: &AuthKey, secret: &Secret) -> bool {
-        auth_key == secret
+    fn verify_signature(&self, signature: &Signature, pub_key: &PublicKey) -> bool {
+        signature == pub_key
     }
 
     fn is_chain_valid(&self, chain: &[Block]) -> bool {
@@ -278,9 +284,13 @@ impl Block {
 
 impl Account {
     pub fn new(rng: &mut ThreadRng) -> Self {
+        let private_key = rng.gen::<PrivateKey>();
+        info!("Private key: {}", private_key);
+
         Self {
             address: rng.gen::<Address>(),
             balance: INIT_BALANCE,
+            pub_key: rng.gen::<PublicKey>(),
         }
     }
 }
@@ -338,6 +348,7 @@ mod node_tests {
             data: Data::Account(Account {
                 address: 1,
                 balance: INIT_BALANCE,
+                pub_key: 1111,
             }),
             nonce: 38656,
             hash: "00003a55bc3e237053bcc5444b589a093c596a4d8d0b2ec6b3a2177f4bdeb42f".to_string(),
@@ -447,6 +458,7 @@ mod node_tests {
         first_block.data = Data::Account(Account {
             address: 1,
             balance: 0,
+            pub_key: 2222,
         });
         testing_logger::setup();
 
